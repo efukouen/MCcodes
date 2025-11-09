@@ -39,7 +39,7 @@
                     <option value="chain">チェーン (Chain)</option>
                 </select>
                 <p class="text-xs text-gray-500 mt-1">
-                    通常は「インパルス」のままでOK！
+                    建築のやつの場合は通常は「インパルス」のままでOK！
                 </p>
             </div>
 
@@ -67,10 +67,10 @@
             <div class="flex items-center">
                 <input id="skipMinecartCleanup" type="checkbox" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
                 <label for="skipMinecartCleanup" class="ml-3 text-sm font-medium text-gray-700">
-                    マインカートをキルしない (デバッグ用)
+                    minecartをキルしない
                 </label>
                 <p class="text-xs text-gray-500 ml-4">
-                    ※チェックを入れると、コマンドブロック設置後に残骸(minecart)が残ります。
+                    ※チェックを入れると、コマンドブロック設置後にcommand_block_minecartが残ります。
                 </p>
             </div>
 
@@ -78,7 +78,7 @@
             <div class="flex items-center">
                 <input id="skipBlockCleanup" type="checkbox" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500" checked>
                 <label for="skipBlockCleanup" class="ml-3 text-sm font-medium text-gray-700">
-                    コマンドブロックを削除しない (設置後に残したい場合)
+                    コマンドブロックとレール、レッドストーンブロックを削除しない
                 </label>
                 <p class="text-xs text-gray-500 ml-4">
                     ※チェックを外すと、最後に設置されたブロックやレールもAirで消されます。
@@ -303,3 +303,4 @@
     </script>
 </body>
 </html>
+
