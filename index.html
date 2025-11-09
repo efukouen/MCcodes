@@ -11,7 +11,7 @@
         body {
             font-family: "Inter", "Noto Sans JP", sans-serif;
         }
-        b {
+                b {
             color:#FF0000
         }
     </style>
@@ -23,7 +23,7 @@
             Minecraft ワンコマンドジェネレーター
         </h1>
         <p class="text-center text-gray-600 mb-8">
-            <b>このサイトはJava版を前提に設計されています。GeyserMCが入っているサーバーなどを除き、<br>統合版では正常に機能しません！</b></b><br>コマンドブロックの種類と、実行したいコマンド（複数行OK）を入力してね！<br>建築以外の用途にもご利用いただけますが、<br>
+             <b>このサイトはJava版を前提に設計されています。<br>Serverソフトウェアが統合版である場合には正常に機能しません！</b></b><br>コマンドブロックの種類と、実行したいコマンド（複数行OK）を入力してね！<br>建築以外の用途にもご利用いただけますが、<br>
 コマンドブロックの並び方は横並びのみに対応しています。
         </p>
 
@@ -65,12 +65,23 @@
 
             <!-- マインカートのクリーンアップ設定 -->
             <div class="flex items-center">
-                <input id="skipCleanup" type="checkbox" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
-                <label for="skipCleanup" class="ml-3 text-sm font-medium text-gray-700">
+                <input id="skipMinecartCleanup" type="checkbox" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                <label for="skipMinecartCleanup" class="ml-3 text-sm font-medium text-gray-700">
                     マインカートをキルしない (デバッグ用)
                 </label>
                 <p class="text-xs text-gray-500 ml-4">
                     ※チェックを入れると、コマンドブロック設置後に残骸(minecart)が残ります。
+                </p>
+            </div>
+
+            <!-- コマンドブロックのクリーンアップ設定 -->
+            <div class="flex items-center">
+                <input id="skipBlockCleanup" type="checkbox" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500" checked>
+                <label for="skipBlockCleanup" class="ml-3 text-sm font-medium text-gray-700">
+                    コマンドブロックを削除しない (設置後に残したい場合)
+                </label>
+                <p class="text-xs text-gray-500 ml-4">
+                    ※チェックを外すと、最後に設置されたブロックやレールもAirで消されます。
                 </p>
             </div>
 
@@ -102,7 +113,8 @@
         // --- DOM要素を取得 ---
         const blockTypeSelect = document.getElementById('blockType');
         const commandsInput = document.getElementById('commands');
-        const skipCleanupCheckbox = document.getElementById('skipCleanup');
+        const skipMinecartCleanupCheckbox = document.getElementById('skipMinecartCleanup');
+        const skipBlockCleanupCheckbox = document.getElementById('skipBlockCleanup'); 
         const firstBlockAlwaysActiveCheckbox = document.getElementById('firstBlockAlwaysActive'); 
         const generateButton = document.getElementById('generateButton');
         const resultArea = document.getElementById('resultArea');
@@ -114,7 +126,8 @@
         generateButton.addEventListener('click', () => {
             const blockType = blockTypeSelect.value;
             const commands = commandsInput.value.trim().split('\n').filter(c => c.trim() !== ""); // 空行を除外
-            const skipCleanup = skipCleanupCheckbox.checked;
+            const skipMinecartCleanup = skipMinecartCleanupCheckbox.checked;
+            const skipBlockCleanup = skipBlockCleanupCheckbox.checked; 
             const firstBlockAlwaysActive = firstBlockAlwaysActiveCheckbox.checked; 
 
             if (commands.length === 0) {
@@ -123,14 +136,14 @@
                 return;
             }
 
-            const generatedCommand = generateOneCommand(commands, blockType, skipCleanup, firstBlockAlwaysActive);
+            const generatedCommand = generateOneCommand(commands, blockType, skipMinecartCleanup, skipBlockCleanup, firstBlockAlwaysActive);
             
             outputTextarea.value = generatedCommand;
             resultArea.classList.remove('hidden');
             copyMessage.classList.add('hidden'); // コピーメッセージを隠す
         });
 
-        // --- コピーボタンがクリックされたときの処理 (変更なし) ---
+        // --- コピーボタンがクリックされたときの処理 ---
         copyButton.addEventListener('click', () => {
             // textareaを一時的に選択可能にする
             outputTextarea.readOnly = false;
@@ -166,14 +179,15 @@
             }, 2000);
         });
 
-        // --- ワンコマンド生成ロジック (クリーンアップの距離を動的に修正) ---
-        function generateOneCommand(commands, blockType, skipCleanup, firstBlockAlwaysActive) {
+        // --- ワンコマンド生成ロジック ---
+        function generateOneCommand(commands, blockType, skipMinecartCleanup, skipBlockCleanup, firstBlockAlwaysActive) {
             
             const escapeJSON = (str) => {
                 // \ を \\\\ に、 " を \" にエスケープ
                 return str.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
             };
 
+            // コマンドブロックIDは "command_block", "repeating_command_block", "chain_command_block" のいずれか
             const firstCommandType = (blockType === 'repeating') ? 'repeating_command_block' : (blockType === 'chain') ? 'chain_command_block' : 'command_block';
             
             const baseZOffset = 0; 
@@ -181,17 +195,14 @@
             // --- 1. すべてのコマンドブロック情報をリストに格納 ---
             const allCommands = [];
 
-            // ユーザーコマンドを処理 (i=0がZ=0に設置される)
             commands.forEach((userCmd, i) => {
                 let blockStateName = "chain_command_block";
-                let auto = "1b"; // Z=1以降のチェーンは常にAuto:1b (i > 0)
+                let auto = "1b"; 
                 
-                // ユーザーの最初のコマンド(i=0)に対して、ユーザーが選択した設定を適用 (Z=0のブロック)
                 if (i === 0) {
                     blockStateName = firstCommandType; 
                     auto = firstBlockAlwaysActive ? "1b" : "0b"; // ユーザー設定
                 } else {
-                    // 2番目以降のブロックはすべてチェーンかつ常時実行
                     blockStateName = 'chain_command_block';
                     auto = '1b'; 
                 }
@@ -210,10 +221,9 @@
             for (let i = 0; i < allCommands.length; i++) {
                 const commandData = allCommands[i];
                 
-                // コマンドブロックのZ座標 (i + baseZOffset)
                 const setblockZ = i + baseZOffset;
 
-                // X座標を ~-1, Y座標を ~-2 に統一
+                // X座標を ~-1, Y座標を ~-2 に統一 (設置場所)
                 const setblockX = -1;
                 const setblockY = -2;
 
@@ -224,33 +234,57 @@
                 const setblockCmd = `/setblock ~${setblockX} ~${setblockY} ~${setblockZ} ${blockState}{Command:"${escapeJSON(commandData.cmd)}",auto:${commandData.auto},conditionmet:1,TrackOutput:0} replace`;
                 const minecartCmd = escapeJSON(setblockCmd);
                 
-                // マインカートのZモーション (setblockZ * 0.5)
+                // マインカートのZモーション
                 const zMotion = setblockZ * 0.5;
                 
                 // マインカート乗客のJSON文字列を作成
                 passengers.push(`{id:"minecraft:command_block_minecart",Motion:[-0.1,0.0,${zMotion}],Command:"${minecartCmd}"}`);
             }
 
-            // 3. クリーンアップがスキップされない場合のみ、クリーンアップ用のコマンドを追加する
-            if (!skipCleanup) {
-                // クリーンアップコマンドは、最後に設置されたブロックの次のZ座標に設置される
-                const cleanupIndex = allCommands.length; 
-                const cleanupBlockZ = cleanupIndex + baseZOffset; 
+            // 3. クリーンアップ用のコマンドブロックを追加
+            if (!skipMinecartCleanup || !skipBlockCleanup) {
                 
-                // 【修正】キル距離をコマンド数に応じて動的に設定 (行数 + 5)
-                const killDistance = commands.length + 5;
-                const killMinecartCommand = `/kill @e[type=minecraft:command_block_minecart,distance=..${killDistance}]`;
+                // クリーンアップコマンドを置くZ座標（最後のコマンドブロックの次）
+                let cleanupIndex = allCommands.length;
+                let currentCleanupZ = cleanupIndex + baseZOffset; 
 
-                // X座標は ~-1, Y座標は ~-2
-                const cleanupBlockType = 'chain_command_block'; 
-                const cleanupCommand = `/setblock ~-1 ~-2 ~${cleanupBlockZ} minecraft:${cleanupBlockType}[facing=south]{Command:"${escapeJSON(killMinecartCommand)}",auto:1b,conditionmet:1,TrackOutput:0} replace`;
-                const cleanupMinecartCmd = escapeJSON(cleanupCommand);
+                // マインカートのクリーンアップ
+                if (!skipMinecartCleanup) {
+                    const killDistance = commands.length + 5;
+                    const killMinecartCommand = `/kill @e[type=minecraft:command_block_minecart,distance=..${killDistance}]`;
 
-                // Z方向の初速 (cleanupBlockZ * 0.5)
-                const cleanupZMotion = cleanupBlockZ * 0.5;
+                    const cleanupBlockType = 'chain_command_block'; 
+                    const cleanupCommand = `/setblock ~-1 ~-2 ~${currentCleanupZ} minecraft:${cleanupBlockType}[facing=south]{Command:"${escapeJSON(killMinecartCommand)}",auto:1b,conditionmet:1,TrackOutput:0} replace`;
+                    const cleanupMinecartCmd = escapeJSON(cleanupCommand);
 
-                // クリーンアップ用マインカートを追加
-                passengers.push(`{id:"minecraft:command_block_minecart",Motion:[-0.1,0.0,${cleanupZMotion}],Command:"${cleanupMinecartCmd}"}`);
+                    const cleanupZMotion = currentCleanupZ * 0.5;
+                    passengers.push(`{id:"minecraft:command_block_minecart",Motion:[-0.1,0.0,${cleanupZMotion}],Command:"${cleanupMinecartCmd}"}`);
+                    
+                    currentCleanupZ++; // 次のクリーンアップブロックのためにZ座標をずらす
+                }
+                
+                // コマンドブロックのクリーンアップ
+                if (!skipBlockCleanup) {
+                    const blockLength = commands.length; 
+                    
+                    // 【修正】クリーンアップブロック自身からの相対座標に変換して、正しく広範囲をAirで埋める
+                    // 削除範囲: X=-1からX=0, Y=-2からY=0, Z=0からZ=blockLength+5 まで
+                    // 実行位置: X=-1, Y=-2, Z=currentCleanupZ
+                    
+                    // fill ~0 ~0 ~(-currentCleanupZ) ~1 ~2 ~(blockLength + 5 - currentCleanupZ) minecraft:air
+                    
+                    const startZ = -currentCleanupZ;
+                    const endZRel = blockLength + 5 - currentCleanupZ;
+
+                    const fillCommand = `/fill ~0 ~0 ~${startZ} ~1 ~2 ~${endZRel} minecraft:air`; 
+
+                    const cleanupBlockType = 'chain_command_block'; 
+                    const cleanupCommand = `/setblock ~-1 ~-2 ~${currentCleanupZ} minecraft:${cleanupBlockType}[facing=south]{Command:"${escapeJSON(fillCommand)}",auto:1b,conditionmet:1,TrackOutput:0} replace`;
+                    const cleanupMinecartCmd = escapeJSON(cleanupCommand);
+
+                    const cleanupZMotion = currentCleanupZ * 0.5;
+                    passengers.push(`{id:"minecraft:command_block_minecart",Motion:[-0.1,0.0,${cleanupZMotion}],Command:"${cleanupMinecartCmd}"}`);
+                }
             }
 
 
@@ -269,5 +303,3 @@
     </script>
 </body>
 </html>
-
-
