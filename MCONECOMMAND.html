@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minecraft ワンコマンドジェネレーター</title>
+    <!-- Tailwind CSSを読み込む -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 念のため、日本語フォントがキレイに出るように */
+        body {
+            font-family: "Inter", "Noto Sans JP", sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
+
+    <div class="bg-white p-8 rounded-2xl shadow-lg w-full max-w-3xl">
+        <h1 class="text-3xl font-bold text-center text-gray-800 mb-2">
+            Minecraft ワンコマンドジェネレーター
+        </h1>
+        <p class="text-center text-gray-600 mb-8">
+            コマンドブロックの種類と、実行したいコマンド（複数行OK）を入力！<br>建築以外の用途にもご利用いただけますが、<Br>コマンドブロックの並び方は横並びのみに対応しています。
+        </p>
+
+        <div class="space-y-6">
+            <!-- コマンドブロックの種類 -->
+            <div>
+                <label for="blockType" class="block text-sm font-medium text-gray-700 mb-2">
+                    1. 最初の実行ブロックの種類 (Z=~0の位置に設置されます) <!-- 修正: Z=2 -> Z=~0 -->
+                </label>
+                <select id="blockType" name="blockType" class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                    <option value="impulse">インパルス (Impulse)</option>
+                    <option value="repeating">リピート (Repeating)</option>
+                    <option value="chain">チェーン (Chain)</option>
+                </select>
+                <p class="text-xs text-gray-500 mt-1">
+                    通常は「インパルス」のままでOK！
+                </p>
+            </div>
+
+            <!-- 実行したいコマンド -->
+            <div>
+                <label for="commands" class="block text-sm font-medium text-gray-700 mb-2">
+                    2. 実行したいコマンド (1行に1コマンド)
+                </label>
+                <textarea id="commands" name="commands" rows="10" class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500" placeholder="例:&#10;say 1番目のコマンド&#10;say 2番目のコマンド&#10;setblock ~ ~1 ~ stone"></textarea>
+            </div>
+
+            <!-- 最初のブロックの実行モード設定 -->
+            <div class="flex items-center">
+                <input id="firstBlockAlwaysActive" type="checkbox" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500" checked>
+                <label for="firstBlockAlwaysActive" class="ml-3 text-sm font-medium text-gray-700">
+                    最初の実行ブロックを常時実行 (Always Active / Auto:1b) にする
+                </label>
+                <p class="text-xs text-gray-500 ml-4">
+                    ※これはZ=~0のブロックに適用されます。 <!-- 修正: Z=1の初期化ブロック... -> Z=~0のブロック... -->
+                </p>
+            </div>
+
+
+            <!-- マインカートのクリーンアップ設定 -->
+            <div class="flex items-center">
+                <input id="skipCleanup" type="checkbox" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"checked disabled="">
+                <label for="skipCleanup" class="ml-3 text-sm font-medium text-gray-700">
+                    Minecartをキルしない (デバッグ用)
+                </label>
+                <p class="text-xs text-gray-500 ml-4">
+                    ※チェックを入れると、コマンドブロック設置後に残骸(minecart)が残ります。<br>※現在、この機能は不具合により無効にできません。<br>　大変お手数ですが、手動での破壊をお願い致します。
+                </p>
+            </div>
+
+
+            <!-- 生成ボタン -->
+            <div>
+                <button id="generateButton" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg shadow-md hover:bg-blue-700 transition duration-300 ease-in-out">
+                    ワンコマンドを生成！
+                </button>
+            </div>
+
+            <!-- 生成結果 -->
+            <div id="resultArea" class="hidden">
+                <label for="output" class="block text-sm font-medium text-gray-700 mb-2">
+                    生成されたワンコマンド
+                </label>
+                <textarea id="output" name="output" rows="8" readonly class="w-full p-3 border border-gray-200 rounded-lg bg-gray-50 text-gray-700 shadow-inner" placeholder="ここに結果が表示されるよ"></textarea>
+                <button id="copyButton" class="mt-2 w-full sm:w-auto bg-green-600 text-white font-bold py-2 px-4 rounded-lg shadow-md hover:bg-green-700 transition duration-300 ease-in-out">
+                    クリップボードにコピー
+                </button>
+                <div id="copyMessage" class="text-green-700 text-sm mt-2 hidden">
+                    コピーしました！
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- DOM要素を取得 ---
+        const blockTypeSelect = document.getElementById('blockType');
+        const commandsInput = document.getElementById('commands');
+        const skipCleanupCheckbox = document.getElementById('skipCleanup');
+        const firstBlockAlwaysActiveCheckbox = document.getElementById('firstBlockAlwaysActive'); 
+        const generateButton = document.getElementById('generateButton');
+        const resultArea = document.getElementById('resultArea');
+        const outputTextarea = document.getElementById('output');
+        const copyButton = document.getElementById('copyButton');
+        const copyMessage = document.getElementById('copyMessage');
+
+        // --- 生成ボタンがクリックされたときの処理 ---
+        generateButton.addEventListener('click', () => {
+            const blockType = blockTypeSelect.value;
+            const commands = commandsInput.value.trim().split('\n').filter(c => c.trim() !== ""); // 空行を除外
+            const skipCleanup = skipCleanupCheckbox.checked;
+            const firstBlockAlwaysActive = firstBlockAlwaysActiveCheckbox.checked; 
+
+            if (commands.length === 0) {
+                outputTextarea.value = "エラー: コマンドを1つ以上入力してください。";
+                resultArea.classList.remove('hidden');
+                return;
+            }
+
+            const generatedCommand = generateOneCommand(commands, blockType, skipCleanup, firstBlockAlwaysActive);
+            
+            outputTextarea.value = generatedCommand;
+            resultArea.classList.remove('hidden');
+            copyMessage.classList.add('hidden'); // コピーメッセージを隠す
+        });
+
+        // --- コピーボタンがクリックされたときの処理 (変更なし) ---
+        copyButton.addEventListener('click', () => {
+            // textareaを一時的に選択可能にする
+            outputTextarea.readOnly = false;
+            outputTextarea.select();
+            outputTextarea.setSelectionRange(0, 99999); // モバイル端末用
+
+            try {
+                const successful = document.execCommand('copy');
+                
+                if(successful) {
+                    copyMessage.textContent = 'コピーしました！';
+                    copyMessage.classList.remove('hidden', 'text-red-700');
+                    copyMessage.classList.add('text-green-700');
+                } else {
+                    copyMessage.textContent = 'コピーに失敗しました。';
+                    copyMessage.classList.remove('hidden', 'text-green-700');
+                    copyMessage.classList.add('text-red-700');
+                }
+
+            } catch (err) {
+                console.error('コピーに失敗しました: ', err);
+                copyMessage.textContent = 'コピーに失敗しました。';
+                copyMessage.classList.remove('hidden', 'text-green-700');
+                copyMessage.classList.add('text-red-700');
+            }
+
+            outputTextarea.readOnly = true;
+            window.getSelection().removeAllRanges();
+            copyMessage.classList.remove('hidden');
+
+            setTimeout(() => {
+                copyMessage.classList.add('hidden');
+            }, 2000);
+        });
+
+        // --- ワンコマンド生成ロジック (ダミーブロックを完全に削除し、Zオフセットを0に) ---
+        function generateOneCommand(commands, blockType, skipCleanup, firstBlockAlwaysActive) {
+            
+            const escapeJSON = (str) => {
+                // \ を \\\\ に、 " を \" にエスケープ
+                return str.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+            };
+
+            const firstCommandType = (blockType === 'repeating') ? 'repeating_command_block' : (blockType === 'chain') ? 'chain_command_block' : 'command_block';
+            
+            const baseZOffset = 0; // 修正: Z=~0からブロックを置き始める
+
+            // --- 1. すべてのコマンドブロック情報をリストに格納 ---
+            const allCommands = [];
+
+            // 1-1. ダミーブロックの削除
+            // 1-2. ユーザーコマンドを処理 (i=0がZ=~0に設置される)
+            commands.forEach((userCmd, i) => {
+                let blockStateName = "chain_command_block";
+                let auto = "1b"; // Z=1以降のチェーンは常にAuto:1b (i > 0)
+                
+                // ユーザーの最初のコマンド(i=0)に対して、ユーザーが選択した設定を適用 (Z=~0のブロック)
+                if (i === 0) {
+                    blockStateName = firstCommandType; 
+                    auto = firstBlockAlwaysActive ? "1b" : "0b"; // ユーザー設定
+                } else {
+                    // 2番目以降のブロックはすべてチェーンかつ常時実行
+                    blockStateName = 'chain_command_block';
+                    auto = '1b'; 
+                }
+
+                allCommands.push({
+                    cmd: userCmd,
+                    type: blockStateName,
+                    auto: auto
+                });
+            });
+
+
+            // --- 2. コマンドブロックリストからマインカート乗客を作成 ---
+            const passengers = [];
+            
+            for (let i = 0; i < allCommands.length; i++) {
+                const commandData = allCommands[i];
+                
+                // コマンドブロックのZ座標 (i + baseZOffset)
+                const setblockZ = i + baseZOffset;
+
+                // X座標を ~-1, Y座標を ~-2 に統一
+                const setblockX = -1;
+                const setblockY = -2;
+
+                // 南向き(facing=south)で、X=-1, Y=-2, Z=+setblockZ の位置に設置
+                const blockState = `minecraft:${commandData.type}[facing=south]`;
+                
+                // setblockコマンドを作成
+                const setblockCmd = `/setblock ~${setblockX} ~${setblockY} ~${setblockZ} ${blockState}{Command:"${escapeJSON(commandData.cmd)}",auto:${commandData.auto},conditionmet:1,TrackOutput:0} replace`;
+                const minecartCmd = escapeJSON(setblockCmd);
+                
+                // マインカートのZモーション (setblockZ * 0.5)
+                const zMotion = setblockZ * 0.5;
+                
+                // マインカート乗客のJSON文字列を作成
+                passengers.push(`{id:"minecraft:command_block_minecart",Motion:[-0.1,0.0,${zMotion}],Command:"${minecartCmd}"}`);
+            }
+
+            // 3. クリーンアップがスキップされない場合のみ、クリーンアップ用のコマンドを追加する
+            if (!skipCleanup) {
+                // クリーンアップコマンドは、最後に設置されたブロックの次のZ座標に設置される
+                const cleanupIndex = allCommands.length; 
+                const cleanupBlockZ = cleanupIndex + baseZOffset; 
+                
+                // キルコマンドをセットするマインカートを作成
+                const killMinecartCommand = `/kill @e[type=minecraft:command_block_minecart,distance=..3]`;
+
+                // X座標は ~-1, Y座標は ~-2
+                const cleanupCommand = `/setblock ~-1 ~-2 ~${cleanupBlockZ} minecraft:command_block[facing=south]{Command:"${escapeJSON(killMinecartCommand)}",auto:1b,conditionmet:1,TrackOutput:0} replace`;
+                const cleanupMinecartCmd = escapeJSON(cleanupCommand);
+
+                // Z方向の初速 (cleanupBlockZ * 0.5)
+                const cleanupZMotion = cleanupBlockZ * 0.5;
+
+                // クリーンアップ用マインカートを追加
+                passengers.push(`{id:"minecraft:command_block_minecart",Motion:[-0.1,0.0,${cleanupZMotion}],Command:"${cleanupMinecartCmd}"}`);
+            }
+
+
+            // 4. 最後に「アクティベーターレール」の乗客を追加
+            passengers.push('{id:"minecraft:falling_block",BlockState:{Name:"minecraft:activator_rail"},Time:1}');
+
+            // 5. すべての乗客をカンマで結合
+            const passengerString = passengers.join(',');
+
+            // 6. 最終的な /summon コマンドを組み立てる
+            let finalCommand = `/summon falling_block ~ ~1 ~ {BlockState:{Name:"minecraft:redstone_block"},Time:1,Passengers:[${passengerString}]}`;
+            
+            return finalCommand;
+        }
+
+    </script>
+</body>
+</html>
