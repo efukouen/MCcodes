@@ -20,14 +20,15 @@
             Minecraft ワンコマンドジェネレーター
         </h1>
         <p class="text-center text-gray-600 mb-8">
-            コマンドブロックの種類と、実行したいコマンド（複数行OK）を入力！<br>建築以外の用途にもご利用いただけますが、<Br>コマンドブロックの並び方は横並びのみに対応しています。
+            コマンドブロックの種類と、実行したいコマンド（複数行OK）を入力してね！<br>建築以外の用途にもご利用いただけますが、<br>
+コマンドブロックの並び方は横並びのみに対応しています。
         </p>
 
         <div class="space-y-6">
             <!-- コマンドブロックの種類 -->
             <div>
                 <label for="blockType" class="block text-sm font-medium text-gray-700 mb-2">
-                    1. 最初の実行ブロックの種類 (Z=~0の位置に設置されます) <!-- 修正: Z=2 -> Z=~0 -->
+                    1. 最初の実行ブロックの種類 (Z=0の位置に設置されます)
                 </label>
                 <select id="blockType" name="blockType" class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500">
                     <option value="impulse">インパルス (Impulse)</option>
@@ -54,19 +55,19 @@
                     最初の実行ブロックを常時実行 (Always Active / Auto:1b) にする
                 </label>
                 <p class="text-xs text-gray-500 ml-4">
-                    ※これはZ=~0のブロックに適用されます。 <!-- 修正: Z=1の初期化ブロック... -> Z=~0のブロック... -->
+                    ※これはZ=0のブロックに適用されます。
                 </p>
             </div>
 
 
             <!-- マインカートのクリーンアップ設定 -->
             <div class="flex items-center">
-                <input id="skipCleanup" type="checkbox" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"checked disabled="">
+                <input id="skipCleanup" type="checkbox" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
                 <label for="skipCleanup" class="ml-3 text-sm font-medium text-gray-700">
-                    Minecartをキルしない (デバッグ用)
+                    マインカートをキルしない (デバッグ用)
                 </label>
                 <p class="text-xs text-gray-500 ml-4">
-                    ※チェックを入れると、コマンドブロック設置後に残骸(minecart)が残ります。<br>※現在、この機能は不具合により無効にできません。<br>　大変お手数ですが、手動での破壊をお願い致します。
+                    ※チェックを入れると、コマンドブロック設置後に残骸(minecart)が残ります。
                 </p>
             </div>
 
@@ -162,7 +163,7 @@
             }, 2000);
         });
 
-        // --- ワンコマンド生成ロジック (ダミーブロックを完全に削除し、Zオフセットを0に) ---
+        // --- ワンコマンド生成ロジック (クリーンアップの距離を動的に修正) ---
         function generateOneCommand(commands, blockType, skipCleanup, firstBlockAlwaysActive) {
             
             const escapeJSON = (str) => {
@@ -172,18 +173,17 @@
 
             const firstCommandType = (blockType === 'repeating') ? 'repeating_command_block' : (blockType === 'chain') ? 'chain_command_block' : 'command_block';
             
-            const baseZOffset = 0; // 修正: Z=~0からブロックを置き始める
+            const baseZOffset = 0; 
 
             // --- 1. すべてのコマンドブロック情報をリストに格納 ---
             const allCommands = [];
 
-            // 1-1. ダミーブロックの削除
-            // 1-2. ユーザーコマンドを処理 (i=0がZ=~0に設置される)
+            // ユーザーコマンドを処理 (i=0がZ=0に設置される)
             commands.forEach((userCmd, i) => {
                 let blockStateName = "chain_command_block";
                 let auto = "1b"; // Z=1以降のチェーンは常にAuto:1b (i > 0)
                 
-                // ユーザーの最初のコマンド(i=0)に対して、ユーザーが選択した設定を適用 (Z=~0のブロック)
+                // ユーザーの最初のコマンド(i=0)に対して、ユーザーが選択した設定を適用 (Z=0のブロック)
                 if (i === 0) {
                     blockStateName = firstCommandType; 
                     auto = firstBlockAlwaysActive ? "1b" : "0b"; // ユーザー設定
@@ -234,11 +234,13 @@
                 const cleanupIndex = allCommands.length; 
                 const cleanupBlockZ = cleanupIndex + baseZOffset; 
                 
-                // キルコマンドをセットするマインカートを作成
-                const killMinecartCommand = `/kill @e[type=minecraft:command_block_minecart,distance=..3]`;
+                // 【修正】キル距離をコマンド数に応じて動的に設定 (行数 + 5)
+                const killDistance = commands.length + 5;
+                const killMinecartCommand = `/kill @e[type=minecraft:command_block_minecart,distance=..${killDistance}]`;
 
                 // X座標は ~-1, Y座標は ~-2
-                const cleanupCommand = `/setblock ~-1 ~-2 ~${cleanupBlockZ} minecraft:command_block[facing=south]{Command:"${escapeJSON(killMinecartCommand)}",auto:1b,conditionmet:1,TrackOutput:0} replace`;
+                const cleanupBlockType = 'chain_command_block'; 
+                const cleanupCommand = `/setblock ~-1 ~-2 ~${cleanupBlockZ} minecraft:${cleanupBlockType}[facing=south]{Command:"${escapeJSON(killMinecartCommand)}",auto:1b,conditionmet:1,TrackOutput:0} replace`;
                 const cleanupMinecartCmd = escapeJSON(cleanupCommand);
 
                 // Z方向の初速 (cleanupBlockZ * 0.5)
